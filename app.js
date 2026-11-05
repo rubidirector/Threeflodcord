@@ -256,10 +256,20 @@ function viewSplash(){
   return `<section class="login"><div class="hero2" aria-hidden="true"><div class="sky"></div><img src="${lambImg('sleep')}" alt=""></div><p class="tag">불러오는 중이에요…</p></section>`}
 function viewSetup(){return `<section class="login"><div><h1 class="wordmark">Threefold Cord</h1><div class="wordsub">세겹줄</div></div><p class="tag">아직 Firebase 설정값이 없어요.<br>dc-config.js에 Firebase 웹 앱 설정값을 넣고 다시 올려 주세요.</p></section>`}
 
+const dPlus=k=>dnum(dkey())-dnum(k)+1;
 function viewTop(){
-  const m=me(),p=partner(),c=couple();
-  const days=dnum(dkey())-dnum(c.since)+1;
-  return `<header class="top"><div class="who"><div class="dday">D+${days}</div><div class="names">${esc(m.name)} ♥ ${esc(p.name)}</div></div></header>`;
+  const m=me(),p=partner(),c=couple(),app=dPlus(c.since);
+  const main=c.anniv?`<button class="ddayBtn" data-act="anniv" aria-label="사귄 날 바꾸기"><span class="dday">D+${dPlus(c.anniv)}</span><span class="since">세겹줄 D+${app}</span></button>`
+    :`<button class="ddayBtn" data-act="anniv" aria-label="사귄 날 입력하기"><span class="dday">D+${app}</span><span class="since addAnniv">＋ 사귄 날 입력</span></button>`;
+  return `<header class="top"><div class="who">${main}<div class="names">${esc(m.name)} ♥ ${esc(p.name)}</div></div></header>`;
+}
+function sheetAnniv(){
+  const c=couple(),today=dkey();
+  sheet(`<form id="annivForm" class="stack" style="gap:14px"><div class="eyebrow">Our Day</div><h2>우리가 사귄 날</h2>
+   <p class="muted" style="margin:0">정하면 맨 위 D+가 이 날부터 세어져요. 사귄 날이 1일(D+1)이에요. 한 사람이 바꾸면 상대 화면에도 바로 바뀌어요.</p>
+   <input id="annivIn" class="field" type="date" max="${today}" value="${c.anniv||''}" required>
+   <p class="small muted" style="margin:0">세겹줄을 함께 시작한 날(${c.since.replaceAll('-','.')}, D+${dPlus(c.since)})은 옆에 작게 계속 보여요.</p>
+   <div class="row">${c.anniv?`<button type="button" class="btn ghost" data-act="annivClear" style="flex:1">지우기</button>`:''}<button type="submit" class="btn" style="flex:2">저장</button></div></form>`);
 }
 function viewNav(){
   const c=couple(),d=dkey();const pending=MISSIONS.some(([k])=>!did(c,d,k,S.session));
@@ -504,7 +514,7 @@ function viewMe(){
   const row=(k,v)=>`<div class="kv"><span>${k}</span><b>${v}</b></div>`;
   return `<main class="stack" style="gap:0">
    <div class="meHead">${initial(m)}<div><h2>${esc(m.name)}</h2><span class="small muted">${esc(m.email)}</span></div></div>
-   <section class="sec"><div class="eyebrow">Couple</div>${row('상대',esc(p.name))}${row('함께한 날',`D+${days} · ${c.since.replaceAll('-','.')}부터`)}${row('내 고유 코드',m.code)}</section>
+   <section class="sec"><div class="eyebrow">Couple</div>${row('상대',esc(p.name))}${row('사귄 날',c.anniv?`D+${dPlus(c.anniv)} · ${c.anniv.replaceAll('-','.')}`:'아직 안 정했어요')}<button class="linkBtn" data-act="anniv" style="align-self:flex-start">${c.anniv?'사귄 날 바꾸기':'사귄 날 입력하기'}</button>${row('세겹줄 시작',`D+${days} · ${c.since.replaceAll('-','.')}부터`)}${row('내 고유 코드',m.code)}</section>
    <section class="sec"><div class="eyebrow">Our Lamb</div>${row('이름',esc(c.lamb.name))}${row('태어난 날',`${c.lamb.born.replaceAll('-','.')} · ${age}일째`)}${mine?row('내가 지은 이름',esc(mine.name)+(c.lamb.cands[c.lamb.pick]===mine?' · 채택':'')):''}${his?row(`${esc(p.name)}님이 지은 이름`,esc(his.name)+(c.lamb.cands[c.lamb.pick]===his?' · 채택':'')):''}</section>
    <section class="sec stack">${accountActions()}</section>
   </main>`;
@@ -621,6 +631,8 @@ document.addEventListener('click',e=>{
       UI.tab=v;if(v==='diary')UI.diary='recent';render();scrollTo(0,0);break;
     case 'diary':UI.diary=v;render();scrollTo(0,0);break;
     case 'care':doCare(v);break;
+    case 'anniv':sheetAnniv();break;
+    case 'annivClear':coupleRef().update({anniv:FV.delete()}).then(()=>toast('사귄 날을 지웠어요')).catch(fail);closeSheet();break;
     case 'phEdit':{const id=dkey()+'_'+m.uid;if(ST.photos[id])openEditor(null,ST.photos[id],id);break}
     case 'phDelete':sheetPhotoDelete();break;
     case 'phDeleteOk':deletePhoto();break;
@@ -633,6 +645,9 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('submit',e=>{
   e.preventDefault();const f=e.target,m=me();
+  if(f.id==='annivForm'){const v=document.getElementById('annivIn').value;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(v))return toast('날짜를 골라 주세요');if(v>dkey())return toast('오늘 이후 날짜는 고를 수 없어요');
+    coupleRef().update({anniv:v}).then(()=>toast('사귄 날을 저장했어요. 상대 화면에도 바로 반영돼요')).catch(fail);closeSheet();return}
   if(f.id==='linkForm'){connectByCode(document.getElementById('pcode').value.trim().toUpperCase());return}
   if(f.id==='nameForm'){const n=document.getElementById('lambName').value.trim();if(!n)return;
     coupleRef().update(new FP('names',m.uid),n.slice(0,8)).catch(fail);document.getElementById('lambName').value='';return}

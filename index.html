@@ -33,6 +33,10 @@ img{-webkit-user-drag:none;user-drag:none;-webkit-touch-callout:none}
 input,textarea,select,.field{font-size:16px!important}
 button,label,a,[data-act]{touch-action:manipulation}
 @media (pointer:coarse){body.typing .nav{display:none}body.typing .app{padding-bottom:24px}}
+.ddayBtn{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;background:none;border:0;padding:0;text-align:left;color:inherit}
+.ddayBtn .since{font-size:12.5px;letter-spacing:.04em;color:var(--muted);font-family:var(--serif)}
+.ddayBtn .addAnniv{color:var(--accent-deep);border-bottom:1px solid var(--accent)}
+input[type=date].field{min-height:48px;-webkit-appearance:none;appearance:none;background:var(--surface);color:var(--ink-strong)}
 
 /* Layout: one phone-width column framed like stationery — hairline double borders, letter-spaced Latin eyebrows, ash-grey serif text on a sage-and-cream palette; the house scene leads the home tab, a text-only tab bar sits at the bottom. */
 :root{
