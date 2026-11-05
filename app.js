@@ -123,7 +123,7 @@ function startAuth(){
   setTimeout(()=>{if(!ST.ready||(ST.user&&!ST.coupleChecked)){UI.slow=true;render()}},12000);
   auth.getRedirectResult().catch(signInError);
   auth.onAuthStateChanged(async u=>{
-    stopAll();Object.assign(ST,{user:u,profile:null,couple:null,coupleChecked:false,days:{},photos:{},photoDay:null});
+    stopAll();Object.assign(ST,{user:u,profile:null,couple:null,coupleChecked:false,days:{},photos:{},photoDay:null,msgs:[],msgReady:false});PREV_PARTNER=null;UI.pushInit=false;UI.pushAsked=false;
     UI.tab='home';UI.introShown=UI.revealShown=false;UI.waitFor=null;LAMB=null;closeSheet();PE=null;
     if(!u){ST.ready=true;render();return}
     ST.ready=false;render();
@@ -153,6 +153,7 @@ function onCoupled(){
   if(code)db.collection('codes').doc(code).set({coupleId:ST.couple.id},{merge:true}).catch(()=>{});
   ST.unsub.push(coupleRef().collection('days').onSnapshot(qs=>{const o={};qs.forEach(d=>{o[d.id]=d.data()});ST.days=o;render()},onErr));
   watchTodayPhotos();
+  watchSocial();
 }
 /* 오늘 사진은 실시간으로, 지난 사진은 펼칠 때만 불러옴 */
 function watchTodayPhotos(){
@@ -239,11 +240,16 @@ function render(){
   const c=couple();ensureLamb(c);
   if(!c.lamb||!c.lamb.name){done(viewWait());if(UI.waitFor!==m.uid){UI.waitFor=m.uid;sheetWait()}return}
   if(ST.photoDay!==dkey())watchTodayPhotos();
-  announce();
-  app.className='app';
-  done(viewTop()+({home:viewHome,today:viewToday,diary:viewDiary,me:viewMe}[UI.tab])()+viewNav());
+  announce();noticePartnerDone();syncBadge();
+  if(UI.startTab){const t=UI.startTab;UI.startTab=null;if(t!=='home'){UI.tabPushed=pushHist();UI.tab=t;UI.forceStick=true}}
+  const stick=UI.tab==='chat'&&(UI.forceStick||window.innerHeight+window.scrollY>=document.documentElement.scrollHeight-160);UI.forceStick=false;
+  app.className='app'+(UI.tab==='chat'?' chatMode':'');
+  done(viewTop()+({home:viewHome,today:viewToday,diary:viewDiary,chat:viewChat,me:viewMe}[UI.tab])()+viewNav());
   if(UI.tab==='home')startScene();
+  afterChatRender(stick);
   if(!(m.seen&&m.seen.reveal)&&!UI.revealShown){UI.revealShown=true;sheetReveal()}
+  else if(m.seen&&m.seen.reveal)setTimeout(maybeAskPush,600);
+  if(!UI.pushInit&&pushSupported()&&Notification.permission==='granted'){UI.pushInit=true;enablePush(false)}
 }
 function viewSplash(){
   if(ST.sdkMissing)return `<section class="login"><p class="tag">Firebase 프로그램을 불러오지 못했어요. 인터넷 연결을 확인하고 새로고침해 주세요.</p><button class="btn wide" data-act="reload">다시 시도</button></section>`;
@@ -271,9 +277,9 @@ function sheetAnniv(){
    <div class="row">${c.anniv?`<button type="button" class="btn ghost" data-act="annivClear" style="flex:1">지우기</button>`:''}<button type="submit" class="btn" style="flex:2">저장</button></div></form>`);
 }
 function viewNav(){
-  const c=couple(),d=dkey();const pending=MISSIONS.some(([k])=>!did(c,d,k,S.session));
-  const t=[['home','아기양'],['today','오늘'],['diary','기록'],['me','계정']];
-  return `<nav class="nav"><div class="in">${t.map(([k,n])=>`<button data-act="tab" data-v="${k}" ${UI.tab===k?'aria-current="page"':''}>${k==='today'&&pending?'<span class="dot" aria-label="할 일 있음"></span>':''}${n}</button>`).join('')}</div></nav>`;
+  const c=couple(),d=dkey();const pending=MISSIONS.some(([k])=>!did(c,d,k,S.session)),unread=unreadCount();
+  const t=[['home','아기양'],['today','오늘'],['diary','기록'],['chat','채팅'],['me','계정']];
+  return `<nav class="nav"><div class="in">${t.map(([k,n])=>`<button data-act="tab" data-v="${k}" ${UI.tab===k?'aria-current="page"':''}>${k==='today'&&pending?'<span class="dot" aria-label="할 일 있음"></span>':''}${k==='chat'&&unread?`<span class="dot count" aria-label="안 읽은 메시지 ${unread}개">${unread>99?'99+':unread}</span>`:''}${n}</button>`).join('')}</div></nav>`;
 }
 
 /* ---- 로그인 ---- */
@@ -425,7 +431,7 @@ function viewToday(){
   const nDone=MISSIONS.filter(([k])=>clear(c,d,k)).length;
   const dt=new Date();const wd='일월화수목금토'[dt.getDay()];
   const EN={verse:'Meditation',prayer:'Prayer',question:'Question',photo:'Photo Diary'};
-  const pills=k=>`<div class="pills"><span class="pill ${did(c,d,k,m.uid)?'ok':''}">${esc(m.name)} ${did(c,d,k,m.uid)?'완료':'대기'}</span><span class="pill ${did(c,d,k,p.uid)?'ok':''}">${esc(p.name)} ${did(c,d,k,p.uid)?'완료':'대기'}</span></div>`;
+  const pills=k=>`<div class="pills"><span class="pill ${did(c,d,k,m.uid)?'ok':''}">${esc(m.name)} ${did(c,d,k,m.uid)?'완료':'대기'}</span><span class="pill ${did(c,d,k,p.uid)?'ok':''}">${esc(p.name)} ${did(c,d,k,p.uid)?'완료':'대기'}</span>${did(c,d,k,p.uid)?'':nudgeBtn(k)}</div>`;
   const head=(k,t)=>`<div class="eyebrow">${EN[k]}</div><div class="hd"><h3>${t}</h3>${clear(c,d,k)?`<span class="stamp">Clear +${MISSION_XP}</span>`:`<span class="rw">함께 하면 ${esc(c.lamb.name)} +${MISSION_XP}</span>`}</div>${pills(k)}`;
   const answers=(k,label)=>{const mine=rec[k]&&rec[k][m.uid],his=rec[k]&&rec[k][p.uid];let s='';
     if(mine) s+=`<div class="ans"><span class="by">${esc(m.name)}</span>${esc(mine.text)}</div>`;
@@ -512,9 +518,10 @@ function viewMe(){
   const mine=c.lamb.cands?c.lamb.cands.find(x=>x.uid===m.uid):null,his=c.lamb.cands?c.lamb.cands.find(x=>x.uid===p.uid):null;
   const row=(k,v)=>`<div class="kv"><span>${k}</span><b>${v}</b></div>`;
   return `<main class="stack" style="gap:0">
-   <div class="meHead">${initial(m)}<div><h2>${esc(m.name)}</h2><span class="small muted">${esc(m.email)}</span></div></div>
+   <div class="meHead">${initial(m)}<div style="flex:1;min-width:0"><h2>${esc(m.name)}</h2><span class="small muted">${esc(m.email)}</span></div><button class="linkBtn" data-act="nick">닉네임 바꾸기</button></div>
    <section class="sec"><div class="eyebrow">Couple</div>${row('상대',esc(p.name))}${row('사귄 날',c.anniv?`D+${dPlus(c.anniv)} · ${c.anniv.replaceAll('-','.')}`:'아직 안 정했어요')}<button class="linkBtn" data-act="anniv" style="align-self:flex-start">${c.anniv?'사귄 날 바꾸기':'사귄 날 입력하기'}</button>${row('내 고유 코드',m.code)}</section>
    <section class="sec"><div class="eyebrow">Our Lamb</div>${row('이름',esc(c.lamb.name))}${row('태어난 날',`${c.lamb.born.replaceAll('-','.')} · ${age}일째`)}${mine?row('내가 지은 이름',esc(mine.name)+(c.lamb.cands[c.lamb.pick]===mine?' · 채택':'')):''}${his?row(`${esc(p.name)}님이 지은 이름`,esc(his.name)+(c.lamb.cands[c.lamb.pick]===his?' · 채택':'')):''}</section>
+   ${viewAlerts()}
    <section class="sec stack">${accountActions()}</section>
   </main>`;
 }
@@ -586,6 +593,7 @@ function savePhoto(){
   const src=PE.src;PE=null;closeSheet();ST.photos[id]=data;
   Promise.all([photoRef(id).set(data),photoSrcRef(id).set({src}),dayRef(d).set({photo:{[m.uid]:{at:data.at}}},{merge:true})]).catch(fail);
   render();
+  if(!had)notifyDone('photo');
   if(had)toast('사진을 바꿨어요');else if(!partnerHas)toast('사진을 올렸어요. 상대도 올리면 미션 클리어!');
 }
 function sheetPhotoDelete(){
@@ -599,6 +607,174 @@ function deletePhoto(){
   Promise.all([photoRef(id).delete(),photoSrcRef(id).delete(),dayRef(d).update(new FP('photo',m.uid),FV.delete()),userRef().update(new FP('seen',d+':photo'),FV.delete())]).catch(fail);
   delete ST.photos[id];render();toast('사진을 삭제했어요');
 }
+
+/* ================= 채팅 · 부르기 · 알림 · 닉네임 ================= */
+const VAPID=(window.DC_CONFIG||{}).vapidKey||'';
+const IS_IOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const STANDALONE=(window.matchMedia&&matchMedia('(display-mode: standalone)').matches)||navigator.standalone===true;
+const MISSION_NAME=Object.fromEntries(MISSIONS);
+const BELL='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>';
+const LS_GET=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
+const LS_SET=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
+
+/* ---- 실시간 구독: 메시지, 부르기 ---- */
+ST.msgs=[];ST.msgReady=false;
+function watchSocial(){
+  const m=me(),bootAt=Date.now();
+  ST.unsub.push(coupleRef().collection('messages').orderBy('atMs','desc').limit(300).onSnapshot(qs=>{
+    const list=[];qs.forEach(d=>list.push(Object.assign({id:d.id},d.data())));list.reverse();
+    if(ST.msgReady){qs.docChanges().forEach(ch=>{const x=ch.doc.data();
+      if(ch.type==='added'&&x.from!==m.uid&&x.atMs>bootAt-5000&&!(UI.tab==='chat'&&!document.hidden))toast(`${partner().name}: ${String(x.text).slice(0,40)}`)})}
+    ST.msgs=list;ST.msgReady=true;render();
+  },onErr));
+  ST.unsub.push(coupleRef().collection('pings').doc(m.uid).onSnapshot(s=>{
+    if(!s.exists)return;const x=s.data(),key='ping:'+m.uid,seen=+(LS_GET(key)||0);
+    if(x.atMs>seen&&Date.now()-x.atMs<6*3600e3){LS_SET(key,String(x.atMs));
+      const msg=`${partner().name}님이 ${josa(x.label||'오늘 미션','을','를')} 기다리고 있어요`;toast(msg);if(LAMB)say('빨리 와요~')}
+  },onErr));
+}
+/* 상대가 오늘 미션을 새로 끝내면 앱 안에서도 알려 줌 */
+let PREV_PARTNER=null;
+function noticePartnerDone(){
+  const c=couple(),p=partner(),d=dkey();if(!c||!p)return;
+  const now=MISSIONS.filter(([k])=>did(c,d,k,p.uid)).map(([k])=>k);
+  if(PREV_PARTNER&&PREV_PARTNER.day===d){now.filter(k=>!PREV_PARTNER.keys.includes(k)).forEach(k=>toast(`${p.name}님이 ${josa(MISSION_NAME[k],'을','를')} 남겼어요`))}
+  PREV_PARTNER={day:d,keys:now};
+}
+const unreadCount=()=>{const m=me(),r=(ST.profile&&ST.profile.chatRead)||0;return ST.msgs.filter(x=>x.from!==m.uid&&x.atMs>r).length};
+function syncBadge(){const n=unreadCount();try{if(navigator.setAppBadge){n?navigator.setAppBadge(n):navigator.clearAppBadge()}}catch(e){}}
+
+/* ---- 채팅 화면 ---- */
+const hhmm=ms=>{const d=new Date(ms),h=d.getHours();return `${h<12?'오전':'오후'} ${h%12||12}:${pad(d.getMinutes())}`};
+function viewChat(){
+  const m=me(),p=partner();let lastDay='',html='';
+  ST.msgs.forEach(x=>{const dk=dkey(new Date(x.atMs));
+    if(dk!==lastDay){lastDay=dk;const dt=new Date(x.atMs);html+=`<div class="chatDay"><span>${dt.getMonth()+1}월 ${dt.getDate()}일 ${'일월화수목금토'[dt.getDay()]}요일</span></div>`}
+    const mine=x.from===m.uid;
+    html+=`<div class="msg ${mine?'mine':'theirs'}"><div class="bubble2">${esc(x.text)}</div><time>${hhmm(x.atMs)}</time></div>`;
+  });
+  return `<main class="chat">
+   ${ST.msgs.length?`<div class="msgs" id="msgs">${html}</div>`:`<div class="chatEmpty"><img src="${lambImg('peek')}" alt=""><p>${esc(p.name)}님에게 첫 메시지를 보내 보세요.<br><span class="small muted">두 사람만 볼 수 있는 대화예요.</span></p></div>`}
+   <form id="chatForm" class="chatBar"><textarea id="chatIn" rows="1" maxlength="1000" placeholder="${esc(p.name)}님에게 메시지"></textarea><button class="btn sm" type="submit">보내기</button></form>
+  </main>`;
+}
+function afterChatRender(stick){
+  if(UI.tab!=='chat')return;
+  const ta=document.getElementById('chatIn');if(ta)autoGrow(ta);
+  if(stick)requestAnimationFrame(()=>window.scrollTo(0,document.documentElement.scrollHeight));
+  const m=me(),last=ST.msgs.filter(x=>x.from!==m.uid).pop();
+  if(last&&!document.hidden&&last.atMs>((ST.profile&&ST.profile.chatRead)||0))setUser({chatRead:last.atMs});
+  markChatSeen();
+}
+function autoGrow(ta){ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,120)+'px'}
+let lastSeenWrite=0;
+function markChatSeen(){if(UI.tab!=='chat'||document.hidden||!ST.couple)return;const n=Date.now();if(n-lastSeenWrite<25000)return;lastSeenWrite=n;
+  coupleRef().update(new FP('people',me().uid,'chatSeenAt'),n).catch(()=>{})}
+setInterval(markChatSeen,30000);
+function sendChat(){
+  const ta=document.getElementById('chatIn');if(!ta)return;const t=ta.value.trim();if(!t)return;
+  const m=me(),p=partner(),now=Date.now();ta.value='';autoGrow(ta);ta.focus();
+  coupleRef().collection('messages').add({from:m.uid,text:t.slice(0,1000),atMs:now,at:FV.serverTimestamp()}).catch(fail);
+  const pSeen=((ST.couple.people||{})[p.uid]||{}).chatSeenAt||0;
+  if(now-pSeen>45000)sendPush({title:m.name,body:t.slice(0,120),tag:'chat',url:'/?tab=chat'});
+}
+/* 화면 키보드 높이만큼 입력창을 올림 (아이폰·안드로이드) */
+if(window.visualViewport){const vv=window.visualViewport,f=()=>{const kb=Math.max(0,window.innerHeight-vv.height-vv.offsetTop);document.documentElement.style.setProperty('--kb',kb+'px')};vv.addEventListener('resize',f);vv.addEventListener('scroll',f)}
+
+/* ---- 부르기 (재촉) ---- */
+function nudge(k){
+  const m=me(),p=partner(),key='nudge:'+dkey()+':'+k,last=+(LS_GET(key)||0);
+  if(Date.now()-last<3*60e3)return toast('방금 불렀어요. 3분 뒤에 다시 부를 수 있어요');
+  LS_SET(key,String(Date.now()));
+  const label=MISSION_NAME[k]||'오늘 미션';
+  coupleRef().collection('pings').doc(p.uid).set({from:m.uid,kind:'nudge',label,atMs:Date.now()}).catch(fail);
+  sendPush({title:'세겹줄',body:`${m.name}님이 ${josa(label,'을','를')} 기다리고 있어요`,tag:'nudge-'+k,url:'/?tab=today'});
+  toast(`${p.name}님을 불렀어요`);
+}
+function nudgeBtn(k){return `<button class="nudge" data-act="nudge" data-v="${k}">${BELL}부르기</button>`}
+function notifyDone(k){
+  const c=couple(),m=me(),p=partner(),d=dkey(),label=MISSION_NAME[k],both=did(c,d,k,p.uid);
+  sendPush({title:'세겹줄',body:both?`${m.name}님도 ${josa(label,'을','를')} 남겼어요. 오늘 함께 클리어! ${c.lamb.name} +${MISSION_XP}`:`${m.name}님이 ${josa(label,'을','를')} 남겼어요. 나도 남기면 볼 수 있어요`,tag:'done-'+k,url:'/?tab=today'});
+}
+
+/* ---- 닉네임 ---- */
+function sheetNick(){
+  const m=me();
+  sheet(`<form id="nickForm" class="stack" style="gap:14px"><div class="eyebrow">Nickname</div><h2>내 닉네임</h2>
+   <p class="muted" style="margin:0">상대 화면과 알림에 이 이름으로 보여요.</p>
+   <input id="nickIn" class="field" maxlength="10" value="${esc(m.name)}" required>
+   <button type="submit" class="btn wide">저장</button></form>`);
+  setTimeout(()=>{const i=document.getElementById('nickIn');if(i){i.focus();i.select()}},50);
+}
+function saveNick(n){
+  const m=me();n=n.trim().slice(0,10);if(!n)return toast('닉네임을 적어 주세요');if(n===m.name){closeSheet();return}
+  setUser({name:n});
+  if(ST.couple)coupleRef().update(new FP('people',m.uid,'name'),n).catch(fail);
+  if(m.code)db.collection('codes').doc(m.code).set({name:n},{merge:true}).catch(()=>{});
+  closeSheet();toast('닉네임을 바꿨어요. 상대 화면에도 바로 반영돼요');
+}
+
+/* ---- 폰 푸시 알림 ---- */
+function pushSupported(){return !!(VAPID&&'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window&&window.firebase&&firebase.messaging)}
+function pushState(){
+  if(!VAPID)return 'unset';
+  if(IS_IOS&&!STANDALONE)return 'install';
+  if(!pushSupported())return 'unsupported';
+  return Notification.permission==='granted'&&ST.profile&&ST.profile.push&&Object.keys(ST.profile.push).length?'on':Notification.permission==='denied'?'denied':'off';
+}
+const tokKey=t=>{let h=5381;for(let i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))>>>0;return 't'+h.toString(36)};
+async function enablePush(fromClick){
+  const st=pushState();
+  if(st==='unset'){if(fromClick)toast('알림 설정값(vapidKey)이 아직 없어요. dc-config.js를 확인해 주세요');return}
+  if(st==='install'){if(fromClick)sheetInstall();return}
+  if(st==='unsupported'){if(fromClick)toast('이 브라우저는 알림을 지원하지 않아요. Chrome이나 Safari로 열어 주세요');return}
+  let perm=Notification.permission;
+  if(perm==='default'){if(!fromClick)return;perm=await Notification.requestPermission()}
+  if(perm!=='granted'){if(fromClick)toast(perm==='denied'?'알림이 막혀 있어요. 휴대폰 설정에서 세겹줄(또는 브라우저) 알림을 허용해 주세요':'알림을 켜지 않았어요');render();return}
+  try{
+    const reg=await navigator.serviceWorker.register('/sw.js');await navigator.serviceWorker.ready;
+    const token=await firebase.messaging().getToken({vapidKey:VAPID,serviceWorkerRegistration:reg});
+    if(token){const cur=Object.assign({},(ST.profile&&ST.profile.push)||{}),k=tokKey(token);
+      if(cur[k]!==token){const keep=Object.entries(cur).filter(([kk])=>kk!==k).slice(-3);const next=Object.fromEntries([...keep,[k,token]]);
+        ST.profile.push=next;await userRef().update({push:next})}}
+    if(fromClick)toast('알림을 켰어요');
+  }catch(e){console.error(e);ST.lastErr=e.code||e.message;if(fromClick)toast('알림을 켜지 못했어요 ('+(e.code||e.message)+')')}
+  render();
+}
+async function sendPush(o){
+  try{if(!ST.couple||!auth.currentUser)return;const t=await auth.currentUser.getIdToken();
+    fetch('/api/notify',{method:'POST',keepalive:true,headers:{'content-type':'application/json',authorization:'Bearer '+t},body:JSON.stringify(Object.assign({cid:ST.couple.id},o))}).catch(()=>{})}catch(e){}
+}
+function sheetInstall(){
+  sheet(`<div class="stack" style="gap:12px"><div class="eyebrow">Alerts</div><h2>아이폰에서 알림 받기</h2>
+   <p class="muted" style="margin:0">아이폰은 세겹줄을 홈 화면에 추가해서 열어야 알림을 받을 수 있어요.</p>
+   <ol class="small" style="margin:0;padding-left:18px;line-height:1.9"><li>Safari 아래(또는 위)의 <b>공유</b> 버튼을 눌러요</li><li><b>홈 화면에 추가</b>를 눌러요</li><li>홈 화면에 생긴 <b>세겹줄</b> 아이콘으로 앱을 열어요</li><li><b>계정 → 알림 켜기</b>를 누르고 허용해요</li></ol>
+   <button class="btn wide" data-act="closeSheet2">알겠어요</button></div>`);
+}
+function sheetPushAsk(){
+  sheet(`<div class="stack" style="gap:12px;text-align:center"><div class="eyebrow" style="justify-content:center">Alerts</div>
+   <img src="${lambImg('peek')}" alt="" style="height:110px;align-self:center">
+   <h2>알림을 켤까요?</h2>
+   <p class="muted" style="margin:0">${esc(partner().name)}님의 메시지, 나를 부를 때, 오늘 미션을 남겼을 때 휴대폰으로 알려 드려요.</p>
+   <div class="row"><button class="btn ghost" data-act="pushLater" style="flex:1">나중에</button><button class="btn" data-act="pushOn" style="flex:2">알림 켜기</button></div></div>`);
+}
+function maybeAskPush(){
+  const m=me();if(!m||UI.pushAsked||document.getElementById('sheetRoot').firstChild)return;
+  const key='pushAsked:'+m.uid;if(LS_GET(key))return;const st=pushState();
+  if(st==='off'&&Notification.permission==='default'){UI.pushAsked=true;LS_SET(key,'1');sheetPushAsk()}
+  else if(st==='install'){UI.pushAsked=true;LS_SET(key,'1');sheetInstall()}
+}
+function viewAlerts(){
+  const st=pushState();
+  const label={on:'켜짐',off:'꺼짐',denied:'막힘',install:'홈 화면에 추가해야 받을 수 있어요',unsupported:'이 브라우저는 지원 안 함',unset:'준비 중'}[st];
+  return `<section class="sec"><div class="eyebrow">Alerts</div><div class="kv"><span>휴대폰 알림</span><b>${label}</b></div>
+   <p class="small muted" style="margin:0">메시지, 부르기, 상대가 오늘 미션을 남겼을 때 알려 드려요.</p>
+   ${st==='on'?'':st==='install'?`<button class="btn soft sm" data-act="installHelp" style="align-self:flex-start">홈 화면에 추가하는 방법</button>`:st==='denied'?`<p class="small" style="margin:0;color:var(--danger)">휴대폰 설정에서 세겹줄(또는 브라우저)의 알림을 허용한 뒤 다시 눌러 주세요.</p><button class="btn soft sm" data-act="pushOn" style="align-self:flex-start">다시 확인</button>`:`<button class="btn soft sm" data-act="pushOn" style="align-self:flex-start">알림 켜기</button>`}</section>`;
+}
+/* 알림을 눌러 들어왔을 때 해당 탭 열기 */
+function openFromUrl(u){try{const t=new URL(u,location.origin).searchParams.get('tab');if(t&&['home','today','diary','chat','me'].includes(t)){if(t!=='home'&&!UI.tabPushed)UI.tabPushed=pushHist();UI.tab=t;render();scrollTo(0,0)}}catch(e){}}
+(function(){const t=new URLSearchParams(location.search).get('tab');if(t){UI.startTab=t;try{history.replaceState(null,'','/')}catch(e){}}})();
+if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(e.data&&e.data.open)openFromUrl(e.data.open)});
 
 /* ================= 동작 ================= */
 function doCare(k){
@@ -627,9 +803,14 @@ document.addEventListener('click',e=>{
     case 'renameProp':coupleRef().update(new FP('names',m.uid),FV.delete()).catch(fail);break;
     case 'copyCode':try{navigator.clipboard.writeText(m.code).then(()=>toast('코드를 복사했어요'),()=>toast('코드: '+m.code))}catch(_){toast('코드: '+m.code)}break;
     case 'tab':if(v!=='home'&&!UI.tabPushed)UI.tabPushed=pushHist();else if(v==='home'&&UI.tabPushed){UI.tabPushed=false;popHist()}
-      UI.tab=v;if(v==='diary')UI.diary='recent';render();scrollTo(0,0);break;
+      UI.tab=v;if(v==='diary')UI.diary='recent';UI.forceStick=v==='chat';render();if(v!=='chat')scrollTo(0,0);break;
     case 'diary':UI.diary=v;render();scrollTo(0,0);break;
     case 'care':doCare(v);break;
+    case 'nudge':nudge(v);break;
+    case 'nick':sheetNick();break;
+    case 'pushOn':closeSheet();enablePush(true);break;
+    case 'pushLater':closeSheet();toast('계정 탭에서 언제든 알림을 켤 수 있어요');break;
+    case 'installHelp':sheetInstall();break;
     case 'anniv':sheetAnniv();break;
     case 'annivClear':coupleRef().update({anniv:FV.delete()}).then(()=>toast('사귄 날을 지웠어요')).catch(fail);closeSheet();break;
     case 'phEdit':{const id=dkey()+'_'+m.uid;if(ST.photos[id])openEditor(null,ST.photos[id],id);break}
@@ -647,12 +828,16 @@ document.addEventListener('submit',e=>{
   if(f.id==='annivForm'){const v=document.getElementById('annivIn').value;
     if(!/^\d{4}-\d{2}-\d{2}$/.test(v))return toast('날짜를 골라 주세요');if(v>dkey())return toast('오늘 이후 날짜는 고를 수 없어요');
     coupleRef().update({anniv:v}).then(()=>toast('사귄 날을 저장했어요. 상대 화면에도 바로 반영돼요')).catch(fail);closeSheet();return}
+  if(f.id==='chatForm'){sendChat();return}
+  if(f.id==='nickForm'){saveNick(document.getElementById('nickIn').value);return}
   if(f.id==='linkForm'){connectByCode(document.getElementById('pcode').value.trim().toUpperCase());return}
   if(f.id==='nameForm'){const n=document.getElementById('lambName').value.trim();if(!n)return;
     coupleRef().update(new FP('names',m.uid),n.slice(0,8)).catch(fail);document.getElementById('lambName').value='';return}
   const k=f.dataset.form;if(k){const ta=document.getElementById('t_'+k),t=ta.value.trim();if(!t)return;
     const c=couple(),d=dkey(),partnerDid=did(c,d,k,partner().uid);ta.value='';
+    const first=!did(c,d,k,m.uid);
     dayRef(d).set({[k]:{[m.uid]:{text:t.slice(0,500),at:Date.now()}}},{merge:true}).catch(fail);
+    if(first)notifyDone(k);
     if(!partnerDid)toast('남겨 두었어요. 상대도 남기면 미션 클리어!');}
 });
 document.addEventListener('toggle',e=>{const d=e.target;if(d.matches&&d.matches('details.day')){UI.dayOpen[d.dataset.day]=d.open;if(d.open)fillPhotos(d)}},true);
@@ -663,5 +848,8 @@ document.addEventListener('focusin',e=>{if(e.target.matches&&e.target.matches('t
 document.addEventListener('focusout',()=>setTimeout(()=>{const a=document.activeElement;if(!(a&&a.matches&&a.matches('textarea,input')))document.body.classList.remove('typing')},50));
 document.addEventListener('touchmove',e=>{if(e.touches&&e.touches.length>1)e.preventDefault()},{passive:false});
 let lastTouch=0;document.addEventListener('touchend',e=>{const n=Date.now();if(n-lastTouch<300&&!e.target.closest('input,textarea'))e.preventDefault();lastTouch=n},{passive:false});
+document.addEventListener('input',e=>{if(e.target.id==='chatIn')autoGrow(e.target)});
+document.addEventListener('keydown',e=>{if(e.target.id==='chatIn'&&e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&!matchMedia('(pointer:coarse)').matches){e.preventDefault();sendChat()}});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&UI.tab==='chat'&&ST.couple){lastSeenWrite=0;afterChatRender(false)}});
 document.addEventListener('change',e=>{if(e.target.id==='photoIn'&&e.target.files[0]){const f=e.target.files[0];e.target.value='';openEditor(f,null)}});
 startAuth();

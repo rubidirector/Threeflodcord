@@ -36,6 +36,33 @@ button,label,a,[data-act]{touch-action:manipulation}
 .ddayBtn{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;background:none;border:0;padding:0;text-align:left;color:inherit}
 .ddayBtn .since{font-size:12.5px;letter-spacing:.04em;color:var(--muted);font-family:var(--serif)}
 .ddayBtn .addAnniv{color:var(--accent-deep);border-bottom:1px solid var(--accent)}
+/* ---- 채팅 ---- */
+.nav button{font-size:14px;letter-spacing:.02em}
+.nav .dot.count{width:auto;height:auto;min-width:16px;padding:0 4px;top:4px;margin-left:14px;border-radius:9px;font-size:10px;line-height:16px;color:#fff;background:var(--accent-deep);letter-spacing:0;font-family:var(--latin);font-weight:500}
+.app.chatMode{padding-bottom:calc(150px + env(safe-area-inset-bottom,0px))}
+.chat{display:flex;flex-direction:column;gap:0}
+.msgs{display:flex;flex-direction:column;gap:6px;padding-top:12px}
+.chatDay{display:flex;align-items:center;gap:12px;margin:14px 0 6px;color:var(--muted);font-size:12px;letter-spacing:.06em}
+.chatDay::before,.chatDay::after{content:"";flex:1;height:1px;background:var(--line)}
+.msg{display:flex;align-items:flex-end;gap:6px;max-width:100%}
+.msg.mine{flex-direction:row-reverse}
+.bubble2{max-width:76%;padding:9px 13px;font-size:15px;line-height:1.55;white-space:pre-wrap;word-break:break-word;-webkit-user-select:text;user-select:text;color:var(--ink-strong)}
+.msg.mine .bubble2{background:var(--accent-soft);border:1px solid var(--accent)}
+.msg.theirs .bubble2{background:var(--pale);border:1px solid var(--line)}
+.msg time{font-size:10.5px;color:var(--muted);white-space:nowrap;padding-bottom:2px;font-variant-numeric:tabular-nums}
+.chatEmpty{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;padding:48px 0;color:var(--ink)}
+.chatEmpty img{height:120px}
+.chatBar{position:fixed;left:0;right:0;bottom:calc(64px + env(safe-area-inset-bottom,0px));z-index:40;display:flex;gap:8px;align-items:flex-end;background:var(--surface);border-top:1px solid var(--line);padding:10px max(16px,calc((100% - 520px)/2 + 16px))}
+.chatBar textarea{flex:1;min-width:0;border:1px solid var(--line);background:var(--surface);padding:10px 12px;font-size:16px;line-height:1.4;resize:none;max-height:120px;font-family:var(--body);color:var(--ink-strong)}
+.chatBar textarea:focus{outline:1px solid var(--accent);border-color:var(--accent)}
+.chatBar .btn{flex:none;padding:11px 14px}
+body.typing .app.chatMode{padding-bottom:calc(90px + var(--kb,0px))}
+body.typing .chatBar{bottom:var(--kb,0px);padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))}
+@media (pointer:fine){body.typing .chatBar{bottom:calc(64px + env(safe-area-inset-bottom,0px));padding-bottom:10px}}
+/* ---- 부르기 ---- */
+.nudge{display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:2px 10px;border:1px solid var(--accent-deep);background:transparent;color:var(--accent-deep);letter-spacing:.04em}
+.nudge svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.nudge:active{background:var(--accent-soft)}
 input[type=date].field{min-height:48px;-webkit-appearance:none;appearance:none;background:var(--surface);color:var(--ink-strong)}
 
 /* Layout: one phone-width column framed like stationery — hairline double borders, letter-spaced Latin eyebrows, ash-grey serif text on a sage-and-cream palette; the house scene leads the home tab, a text-only tab bar sits at the bottom. */
@@ -279,7 +306,7 @@ h1,h2,h3{font-family:var(--serif);font-weight:700;color:var(--ink-strong);margin
 .lamb .shadow{background:rgba(120,125,110,.14)}
 .lamb .nameTag{background:#f6f7f1}
 /* ---- 아기양 ---- */
-.nav .in{grid-template-columns:repeat(4,1fr)}
+.nav .in{grid-template-columns:repeat(5,1fr)}
 .initial{width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--pale);display:grid;place-items:center;font-size:16px;color:var(--ink-strong);flex:none}
 .lvPill{display:inline-flex;align-items:baseline;gap:6px;border:1px solid var(--line);background:var(--surface);padding:5px 11px;white-space:nowrap}
 .lvPill b{font-family:var(--latin);font-weight:500;font-size:17px;color:var(--ink-strong);line-height:1}
@@ -433,6 +460,7 @@ details.day summary .d small{font-family:var(--serif);font-size:12px;color:var(-
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 <script src="dc-config.js"></script>
 <script src="app.js"></script>
 </body>
