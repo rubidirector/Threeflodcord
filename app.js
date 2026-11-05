@@ -95,8 +95,8 @@ const coupleRef=()=>db.collection('couples').doc(ST.couple.id);
 const dayRef=d=>coupleRef().collection('days').doc(d);
 const photoRef=id=>coupleRef().collection('photos').doc(id);
 const photoSrcRef=id=>coupleRef().collection('photoSrc').doc(id);
-function fail(e){console.error(e);toast(e&&e.code==='permission-denied'?'저장할 권한이 없어요. Firestore 규칙을 게시했는지 확인해 주세요.':'저장하지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.')}
-function onErr(e){console.error(e);if(e&&e.code==='permission-denied')toast('데이터를 읽을 권한이 없어요. Firestore 규칙을 게시했는지 확인해 주세요.')}
+function fail(e){console.error(e);ST.lastErr=(e&&(e.code||e.message))||String(e);toast(e&&e.code==='permission-denied'?'저장할 권한이 없어요. Firestore 규칙을 게시했는지 확인해 주세요.':'저장하지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.')}
+function onErr(e){console.error(e);ST.lastErr=(e&&(e.code||e.message))||String(e);if(e&&e.code==='permission-denied')toast('데이터를 읽을 권한이 없어요. Firestore 규칙을 게시했는지 확인해 주세요.')}
 function setUser(patch){ST.profile=Object.assign({},ST.profile,patch);return userRef().set(Object.assign({},patch,{updatedAt:FV.serverTimestamp()}),{merge:true}).catch(fail)}
 
 /* 로그인 */
@@ -119,13 +119,15 @@ function signInError(e){
 function stopAll(){ST.unsub.forEach(f=>{try{f()}catch(e){}});ST.unsub=[];if(ST.photoUnsub){ST.photoUnsub();ST.photoUnsub=null}}
 function startAuth(){
   if(!CONFIGURED){ST.ready=true;render();return}
+  if(!auth){ST.ready=true;ST.sdkMissing=true;render();return}
+  setTimeout(()=>{if(!ST.ready||(ST.user&&!ST.coupleChecked)){UI.slow=true;render()}},12000);
   auth.getRedirectResult().catch(signInError);
   auth.onAuthStateChanged(async u=>{
     stopAll();Object.assign(ST,{user:u,profile:null,couple:null,coupleChecked:false,days:{},photos:{},photoDay:null});
     UI.tab='home';UI.introShown=UI.revealShown=false;UI.waitFor=null;LAMB=null;closeSheet();PE=null;
     if(!u){ST.ready=true;render();return}
     ST.ready=false;render();
-    try{await ensureProfile(u)}catch(e){fail(e)}
+    try{await Promise.race([ensureProfile(u),new Promise((_,rej)=>setTimeout(()=>rej({code:'timeout: 서버 응답 없음'}),15000))])}catch(e){fail(e)}
     ST.unsub.push(userRef().onSnapshot(s=>{if(s.exists){ST.profile=s.data()}render()},onErr));
     ST.unsub.push(db.collection('couples').where('members','array-contains',u.uid).limit(1).onSnapshot(qs=>{
       const doc=qs.docs[0],prev=ST.couple&&ST.couple.id;
@@ -234,7 +236,15 @@ function render(){
   if(UI.tab==='home')startScene();
   if(!(m.seen&&m.seen.reveal)&&!UI.revealShown){UI.revealShown=true;sheetReveal()}
 }
-function viewSplash(){return `<section class="login"><div class="hero2" aria-hidden="true"><div class="sky"></div><img src="${lambImg('sleep')}" alt=""></div><p class="tag">불러오는 중이에요…</p></section>`}
+function viewSplash(){
+  if(ST.sdkMissing)return `<section class="login"><p class="tag">Firebase 프로그램을 불러오지 못했어요. 인터넷 연결을 확인하고 새로고침해 주세요.</p><button class="btn wide" data-act="reload">다시 시도</button></section>`;
+  if(UI.slow)return `<section class="login"><div class="hero2" aria-hidden="true"><div class="sky"></div><img src="${lambImg('sleep')}" alt=""></div>
+   <div class="stack" style="gap:10px"><h2 style="font-size:20px;text-align:center">서버에 연결하지 못하고 있어요</h2>
+   <p class="small muted" style="margin:0">Firebase에서 아래를 확인해 주세요.</p>
+   <ol class="small" style="margin:0;padding-left:18px;line-height:1.8"><li>Firestore Database를 만들었는지 (위치 서울, 프로덕션 모드)</li><li>규칙 탭에 firestore-rules.txt를 붙여 넣고 <b>게시</b>했는지</li><li>Google Cloud API 키의 <b>API 제한사항</b>을 '키 제한 안 함'으로 두었는지</li></ol>
+   ${ST.lastErr?`<p class="small" style="margin:0;color:var(--danger)">오류: ${esc(ST.lastErr)}</p>`:''}
+   <div class="row"><button class="btn" data-act="reload" style="flex:1">다시 시도</button><button class="btn ghost" data-act="logout" style="flex:1">로그아웃</button></div></div></section>`;
+  return `<section class="login"><div class="hero2" aria-hidden="true"><div class="sky"></div><img src="${lambImg('sleep')}" alt=""></div><p class="tag">불러오는 중이에요…</p></section>`}
 function viewSetup(){return `<section class="login"><div><h1 class="wordmark">Threefold Cord</h1><div class="wordsub">세겹줄</div></div><p class="tag">아직 Firebase 설정값이 없어요.<br>dc-config.js에 Firebase 웹 앱 설정값을 넣고 다시 올려 주세요.</p></section>`}
 
 function viewTop(){
@@ -591,7 +601,8 @@ document.addEventListener('click',e=>{
   switch(a){
     case 'google':signIn();break;
     case 'accounts':sheetAccounts();break;
-    case 'logout':closeSheet();auth.signOut();break;
+    case 'logout':closeSheet();UI.slow=false;auth.signOut();break;
+    case 'reload':location.reload();break;
     case 'closeSheet2':closeSheet();break;
     case 'introOk':setUser({introSeen:true});closeSheet();break;
     case 'revealOk':setUser({seen:{reveal:1}});closeSheet();break;
