@@ -210,8 +210,17 @@ function announce(){
 }
 /* ================= 공통 UI ================= */
 let tT;function toast(t){const e=document.getElementById('toast');e.textContent=t;e.classList.add('on');clearTimeout(tT);tT=setTimeout(()=>e.classList.remove('on'),2400)}
-function sheet(html){document.getElementById('sheetRoot').innerHTML=`<div class="sheetBg" data-act="closeSheet"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`}
-function closeSheet(){document.getElementById('sheetRoot').innerHTML=''}
+/* 팝업과 탭을 휴대폰 '뒤로 가기'(안드로이드 뒤로 버튼, 아이폰 밀어서 뒤로)와 연결 */
+let SHEET_PUSHED=false,IGNORE_POP=0;
+function pushHist(){try{history.pushState({sg:Date.now()},'');return true}catch(e){return false}}
+function popHist(){IGNORE_POP++;try{history.back()}catch(e){IGNORE_POP--}}
+function sheet(html){const r=document.getElementById('sheetRoot'),was=!!r.firstChild;r.innerHTML=`<div class="sheetBg" data-act="closeSheet"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`;if(!was&&!SHEET_PUSHED)SHEET_PUSHED=pushHist()}
+function closeSheet(fromPop){const r=document.getElementById('sheetRoot');r.innerHTML='';if(SHEET_PUSHED){SHEET_PUSHED=false;if(fromPop!==true)popHist()}}
+window.addEventListener('popstate',()=>{
+  if(IGNORE_POP){IGNORE_POP--;return}
+  if(document.getElementById('sheetRoot').firstChild){PE=null;closeSheet(true);return}
+  if(UI.tabPushed){UI.tabPushed=false;UI.tab='home';render();scrollTo(0,0)}
+});
 const initial=a=>`<span class="initial" aria-hidden="true">${esc((a.name||'?').slice(0,1))}</span>`;
 /* ================= 렌더링 ================= */
 function keepInputs(app){const o={};app.querySelectorAll('textarea[id],input[id]').forEach(el=>{if(el.type!=='file'&&el.value)o[el.id]=el.value});const f=document.activeElement;return {o,focus:f&&f.id&&app.contains(f)?f.id:null,sel:f&&f.selectionStart}}
@@ -608,7 +617,8 @@ document.addEventListener('click',e=>{
     case 'revealOk':setUser({seen:{reveal:1}});closeSheet();break;
     case 'renameProp':coupleRef().update(new FP('names',m.uid),FV.delete()).catch(fail);break;
     case 'copyCode':try{navigator.clipboard.writeText(m.code).then(()=>toast('코드를 복사했어요'),()=>toast('코드: '+m.code))}catch(_){toast('코드: '+m.code)}break;
-    case 'tab':UI.tab=v;if(v==='diary')UI.diary='recent';render();scrollTo(0,0);break;
+    case 'tab':if(v!=='home'&&!UI.tabPushed)UI.tabPushed=pushHist();else if(v==='home'&&UI.tabPushed){UI.tabPushed=false;popHist()}
+      UI.tab=v;if(v==='diary')UI.diary='recent';render();scrollTo(0,0);break;
     case 'diary':UI.diary=v;render();scrollTo(0,0);break;
     case 'care':doCare(v);break;
     case 'phEdit':{const id=dkey()+'_'+m.uid;if(ST.photos[id])openEditor(null,ST.photos[id],id);break}
@@ -633,7 +643,10 @@ document.addEventListener('submit',e=>{
 });
 document.addEventListener('toggle',e=>{const d=e.target;if(d.matches&&d.matches('details.day')){UI.dayOpen[d.dataset.day]=d.open;if(d.open)fillPhotos(d)}},true);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&ST.couple&&ST.photoDay!==dkey())render()});
-document.addEventListener('gesturestart',e=>e.preventDefault());
+['gesturestart','gesturechange','gestureend'].forEach(t=>document.addEventListener(t,e=>e.preventDefault(),{passive:false}));
+/* 글 쓸 때는 아래 탭 막대를 숨겨 키보드 위로 떠오르지 않게 */
+document.addEventListener('focusin',e=>{if(e.target.matches&&e.target.matches('textarea,input:not([type=file]):not([type=range])'))document.body.classList.add('typing')});
+document.addEventListener('focusout',()=>setTimeout(()=>{const a=document.activeElement;if(!(a&&a.matches&&a.matches('textarea,input')))document.body.classList.remove('typing')},50));
 document.addEventListener('touchmove',e=>{if(e.touches&&e.touches.length>1)e.preventDefault()},{passive:false});
 let lastTouch=0;document.addEventListener('touchend',e=>{const n=Date.now();if(n-lastTouch<300&&!e.target.closest('input,textarea'))e.preventDefault();lastTouch=n},{passive:false});
 document.addEventListener('change',e=>{if(e.target.id==='photoIn'&&e.target.files[0]){const f=e.target.files[0];e.target.value='';openEditor(f,null)}});

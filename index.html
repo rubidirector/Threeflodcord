@@ -7,6 +7,9 @@
 <meta name="description" content="둘이 함께 말씀 읽고 기도하며 아기양 한 마리를 키워가는 크리스천 커플앱">
 <meta name="theme-color" content="#ffffff">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="format-detection" content="telephone=no,email=no,address=no">
 <meta name="apple-mobile-web-app-title" content="세겹줄">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icon-192.png">
@@ -22,6 +25,14 @@ img{max-width:100%}
 [hidden]{display:none!important}
 .inappNote{margin:0;font-size:13px;line-height:1.6;color:var(--ink);background:var(--pale);padding:10px 12px;text-align:left}
 img.loading{background:var(--surface-2);min-height:60px}
+/* 휴대폰 웹 최적화: 당겨서 새로고침·튕김 막기, 길게 눌러 선택·저장 메뉴 막기, 확대 막기 */
+html,body{overscroll-behavior:none;touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{overflow-x:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea,.ans,blockquote,.qText,.dayVerse,.code{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
+img{-webkit-user-drag:none;user-drag:none;-webkit-touch-callout:none}
+input,textarea,select,.field{font-size:16px!important}
+button,label,a,[data-act]{touch-action:manipulation}
+@media (pointer:coarse){body.typing .nav{display:none}body.typing .app{padding-bottom:24px}}
 
 /* Layout: one phone-width column framed like stationery — hairline double borders, letter-spaced Latin eyebrows, ash-grey serif text on a sage-and-cream palette; the house scene leads the home tab, a text-only tab bar sits at the bottom. */
 :root{
